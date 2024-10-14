@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eco Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <img src="{{ url_for('static', filename='image/logo.png') }}" alt="Eco Assistant Logo" style="width: 200px; margin-bottom: 20px;">
+            <button id="new-chat-btn" class="menu-btn">Novo Chat</button>
+            
+            <!-- Lista de chats anteriores -->
+            <div id="chat-list">
+                <!-- Os chats anteriores serão carregados aqui via JS -->
+            </div>
+        </div>
+
+        <div class="chat-window">
+            <div class="chat-box" id="chat-box">
+                <!-- Histórico de conversa será injetado aqui via JS -->
+            </div>
+            <div class="input-box">
+                <input type="text" id="user-input" placeholder="Digite uma nova mensagem">
+                <button id="send-btn">
+                    Enviar
+                    <!-- <img src="send-icon.png" alt="Enviar" style="width: 20px;"> -->
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var currentChatId = null;
+
+        // Função para carregar todos os chats e exibir na barra lateral
+        function loadChatList() {
+            $.get('/get_all_chats', function(data) {
+                $('#chat-list').html('');  // Limpa a lista de chats
+                data.chats.forEach(function(chat_id) {
+                    $('#chat-list').append(`
+                        <div class="chat-btn-container">
+                            <button class="chat-btn" data-chat-id="${chat_id}">${chat_id}</button>
+                            <button class="delete-chat-btn" data-chat-id="${chat_id}">X</button>
+                        </div>
+                    `);
+                });
+            });
+        }
+
+        // Função para carregar o histórico de um chat
+        function loadChatHistory(chat_id) {
+            $.get('/get_chat_history', {chat_id: chat_id}, function(data) {
+                updateChatHistory(data.chat_history);
+                currentChatId = chat_id;  // Atualiza o chat atual
+                scrollToBottom();  // Desce o chat para a mensagem mais recente
+            });
+        }
+
+        // Função para atualizar o chat com o histórico
+        function updateChatHistory(history) {
+            $('#chat-box').html('');  // Limpa o chat
+            history.forEach(function(entry) {
+                $('#chat-box').append('<div class="user-message">' + entry.user + '</div>');
+                $('#chat-box').append('<div class="bot-message">' + entry.bot.replace(/\n/g, '<br>') + '</div>');
+            });
+            scrollToBottom();  // Desce o chat para a mensagem mais recente
+        }
+
+        // Função para enviar a mensagem
+        function sendMessage() {
+            var userInput = $('#user-input').val();
+            if (userInput.trim() != '' && currentChatId != null) {
+                $.post('/send_message', {message: userInput, chat_id: currentChatId}, function(data) {
+                    updateChatHistory(data.chat_history);  // Atualiza o chat com o histórico
+                    $('#user-input').val('');  // Limpa o campo de texto
+                    scrollToBottom();  // Desce o chat para a mensagem mais recente
+                });
+            }
+        }
+
+        // Função para rolar automaticamente para a última mensagem
+        function scrollToBottom() {
+            var chatBox = document.getElementById("chat-box");
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        $(document).ready(function() {
+            // Carregar a lista de chats ao abrir a página
+            loadChatList();
+
+            // Clique no botão para iniciar um novo chat
+            $('#new-chat-btn').click(function() {
+                $.post('/new_chat', function(response) {
+                    alert(response.message);
+                    loadChatList();  // Atualiza a lista de chats
+                    currentChatId = response.chat_id;  // Define o novo chat como o atual
+                    $('#chat-box').html('<div class="bot-message">' + response.bot_response.replace(/\n/g, '<br>') + '</div>');  // Exibe a mensagem de boas-vindas
+                    scrollToBottom();  // Desce o chat para a mensagem mais recente
+                });
+            });
+
+            // Clique em um chat da lista para carregar o histórico
+            $(document).on('click', '.chat-btn', function() {
+                var chatId = $(this).data('chat-id');
+                loadChatHistory(chatId);  // Carregar o histórico do chat clicado
+            });
+
+            // Clique no "X" para excluir o chat
+            $(document).on('click', '.delete-chat-btn', function() {
+                var chatId = $(this).data('chat-id');
+                if (confirm('Você tem certeza que deseja excluir este chat?')) {
+                    $.post('/delete_chat', {chat_id: chatId}, function(response) {
+                        alert(response.message);
+                        loadChatList();  // Atualiza a lista de chats
+                    });
+                }
+            });
+
+            // Enviar mensagem ao clicar no botão
+            $('#send-btn').click(function() {
+                sendMessage();  // Chama a função de envio
+            });
+
+            // Enviar mensagem ao pressionar a tecla Enter
+            $('#user-input').keypress(function(e) {
+                if (e.which == 13) { // Código para a tecla Enter
+                    sendMessage();  // Chama a função de envio
+                }
+            });
+        });
+    </script>
+</body>
+</html>
